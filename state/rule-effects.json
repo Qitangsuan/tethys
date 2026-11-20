@@ -1,0 +1,107 @@
+{
+  "_说明": "规则 → 它能压制的失败类型。verify.py 靠这张表回答「这条规则到底有没有用」。since 是规则真正开始生效的日期（注入 AGENTS 那天）。key 必须为纯数字字符串（verify 排序无容错）。2026-11-20 v2 重建：从幸存 AGENTS 注入块恢复 10 条规则，失败类型对齐 v2 判定器（caliber-2026-11-20-1）。",
+  "rules": {
+    "1": {
+      "title": "pwsh 工具是 Windows PowerShell 5.1",
+      "since": "2026-11-06",
+      "verify": false,
+      "verify_reason": "exit_1_real 可见但无法分离脚本执行子集",
+      "detects": [],
+      "note": "H4 后 exit_1_real 可见（[exit code] 锚点），但无法从该族分离「脚本执行被禁」子集；效果只能看 exit_1_real 总量趋势，不作强判决。"
+    },
+    "2": {
+      "title": "python/node 不在 PATH，多行脚本落临时 .py",
+      "since": "2026-11-06",
+      "verify": false,
+      "verify_reason": "parse error 落 exit_1_real，不可分离",
+      "detects": [],
+      "note": "parse error 落 exit_1_real（H4 后可见），但无法精确分离；不可验证。"
+    },
+    "3": {
+      "title": "工具输出约 50KB 封顶",
+      "since": "2026-11-06",
+      "verify": false,
+      "detects": [],
+      "note": "截断计数不在真失败口径里（truncated 是独立指标），不可验证。"
+    },
+    "4": {
+      "title": "exit code 1 常常是假阳性",
+      "since": "2026-11-06",
+      "verify": false,
+      "verify_reason": "假阳性剔除不计入真失败，效果看 clean_exit 剔除量",
+      "detects": [],
+      "note": "H4 后 clean_exit 单独识别（[exit code] 1/3 且无错误信号）并排除；效果看剔除量，不影响真失败口径，不可验证。"
+    },
+    "5": {
+      "title": "工具异常先分诊（宿主抽风 / provider 配置 / 跨域重定向）",
+      "since": "2026-11-06",
+      "verify_mode": "config_ticket",
+      "detects": [
+        "pty_startup_fail",
+        "auto_review_block"
+      ],
+      "detectsPatterns": [
+        "cross-origin redirect",
+        "multiple usable web providers",
+        "api key",
+        "HTTP 401",
+        "HTTP 404"
+      ],
+      "note": "2026-11-14 R52 扩为分诊：web_fetch 的 provider 歧义/401/404 转告用户、cross-origin redirect 按报错目标重抓。2026-11-20 砚舟会话实测补：cordis_inspect_query 的 input 传字符串 → rejected input: must be an object，agent 连重试 3 次全撞墙——参数格式错重试无用，按报错改传参。pty_startup_fail 在 v2 判定器归 host_fault 排除类，此处按样本不足处理。"
+    },
+    "6": {
+      "title": "动手之前先确认目标存在",
+      "since": "2026-11-06",
+      "detects": [
+        "file_read_missing",
+        "read_out_of_range"
+      ]
+    },
+    "7": {
+      "title": "改文件走「读 → 改」闭环，edit 失败先分诊",
+      "since": "2026-11-06",
+      "detects": [
+        "file_not_read",
+        "file_conflict",
+        "edit_no_match"
+      ],
+      "note": "2026-11-14 R52 判据从「默认按①默写错」改为场景分诊，并补「连续 edit/write 重建后每次成功改完都要重新拿最新内容」。"
+    },
+    "8": {
+      "title": "app.asar 里的路径搜不到（grep/glob 进不去）",
+      "since": "2026-11-06",
+      "verify": false,
+      "detects": [],
+      "detectsPatterns": [
+        "grep search failed",
+        "glob search failed"
+      ],
+      "note": "pattern 覆盖所有 ripgrep 失败，样本里多数是 app.asar。2026-11-20 v2 判定器把 grep search failed 归 tool_error::，用模式匹配。"
+    },
+    "9": {
+      "title": "调工具前先把标识符查准（entry id / 队友名 / Service 名）",
+      "since": "2026-11-11",
+      "detects": [],
+      "detectsPatterns": [
+        "unknown entry id",
+        "no catalogued Service",
+        "active teammate",
+        "Team member limit",
+        "invalid arguments",
+        "rejected input",
+        "must be an object"
+      ],
+      "note": "2026-11-11 R48 起因 tool_error 族涨到 37 次而加入。"
+    },
+    "10": {
+      "title": "长任务把约束写进文件，别指望对话记得住",
+      "since": "2026-11-06",
+      "verify": false,
+      "detects": [],
+      "note": "无单一 failKind 对应（针对长会话丢约定），不可验证。"
+    }
+  },
+  "_口径修正": {
+    "2026-11-20": "v2 重建：判定器口径 caliber-2026-11-20-2（事件锚点=tool/result 首文本以 Error:/错误：开头 + callId 全局去重；排除 tool_aborted/user_cancelled/host_fault）。旧口径（mine.py）的 failKinds 与 v2 不完全可比。"
+  }
+}
