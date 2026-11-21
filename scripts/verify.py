@@ -4,6 +4,7 @@
 import argparse
 import json
 import math
+import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,7 +28,16 @@ def is_config_kind(kind, patterns=None):
     # 历史调用者可只传 kind；主循环显式传入同一份已加载的配置。
     if patterns is None:
         patterns = read_json(CALIBER)["configKinds"]
-    return any(p in kind for p in patterns)
+    folded = kind.casefold()
+    return any(p.casefold() in folded for p in patterns if p.strip())
+
+
+def rule_id_order(key):
+    # JSON 对象键均为字符串。按有效位数、数字串排序，避免 int 的长度限制。
+    if key.isascii() and key.isdecimal():
+        digits = key.lstrip("0") or "0"
+        return (0, len(digits), digits, key)
+    return (1, 0, "", key)
 
 
 def match_kind(kind, cfg):
@@ -216,7 +226,12 @@ def render(data, effects, cal):
     audit(data, cal)
     cfgs, st = effects["rules"], cal["statistics"]
     alpha = st["alpha"]
-    ids = sorted(cfgs, key=int)
+    ids = sorted(cfgs, key=rule_id_order)
+    nonnumeric = [k for k in ids if not (k.isascii() and k.isdecimal())]
+    warning = None
+    if nonnumeric:
+        warning = "非数字规则键已排在数字键之后，仍按原规则参与筛选：" + ", ".join(map(repr, nonnumeric))
+        print(f"[verify] 警告：{warning}", file=sys.stderr)
     family = [k for k in ids if cfgs[k].get("verify") is not False and cfgs[k].get("verify_mode") != "config_ticket"]
     m = len(family)  # 先定检验族；样本不足也保留名额，不按观测 p 值筛选。
     real = sum(data["real"].values())
@@ -232,6 +247,8 @@ def render(data, effects, cal):
              f"校正前为双侧会话聚类 t 近似；结论用 Bonferroni 调整后 p ≤ {alpha:g}（同窗口 m={m}，未估计者也占名额）。", "",
              "| 规则 | 前失败/调用（每千） | 后失败/调用（每千） | RR | 聚类 CI | 原始 p | 调整后 p | 判决及理由 |",
              "|---|---:|---:|---:|---|---:|---:|---|"]
+    if warning:
+        lines[2:2] = [f"> 警告：{warning}", ""]
     notes, exact_lines, skips = [], [], []
     for k in ids:
         cfg = cfgs[k]

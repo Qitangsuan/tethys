@@ -190,6 +190,7 @@ def main():
         "newKinds": new_kinds,
         "generatedAt": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
         "sessions": len(files),
+        "rawSessionIds": [os.path.splitext(os.path.basename(fp))[0] for fp in files],  # ready 的完整快照名册
         "totalCalls": total_calls,
         "uniqueCalls": unique_calls,
         "duplicatedCalls": dup_calls,
@@ -203,7 +204,7 @@ def main():
     _write_text(dst, json.dumps(out, ensure_ascii=False, indent=2))
 
     print(f"[classify] 会话 {out['sessions']} / 调用 {total_calls}（唯一 {unique_calls}，重复 {dup_calls} / "
-          f"{dup_calls / total_calls * 100:.1f}%）/ 未配对 {unrouted}")
+          f"{(dup_calls / total_calls * 100 if total_calls else 0):.1f}%）/ 未配对 {unrouted}")
     print(f"[classify] 真失败 {sum(real.values())}:")
     for k, n in out["real"].items():
         print(f"  {k}: {n}")

@@ -106,12 +106,7 @@ def extract_tool_map():
     return mapping
 
 
-def text_of(result_data):
-    out = []
-    for c in (result_data.get("message") or {}).get("content") or []:
-        if isinstance(c, dict) and c.get("type") == "text":
-            out.append(c.get("text") or "")
-    return "\n".join(out)
+text_of = C.text_of  # 与判定器复用同一实现，保留原模块入口。
 
 
 def main():
