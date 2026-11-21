@@ -75,6 +75,11 @@ dist/AGENTS.evolve.md  ──apply.py──▶  ~/.dsh/AGENTS.md（tethys 标记
 - `audit_rule7_deepdive.py`：规则 7 深挖（测量修正 + `edit_no_match` 失败链）。
 - 全部为**描述性审计**，不作因果结论；汇总结论见 [docs/audit-summary.md](docs/audit-summary.md)。
 
+## 插件健康度审查（F）
+- `audit_plugins.py`：从 raw 统计每个工具/插件的调用数、失败率、失败归因；输出「活跃/静默/添乱」状态。
+- 工具→插件映射：扫描第三方包 `tools.register({ name })` 注册 + 已知映射表（34 个工具）；扫不到的归「内置/未识别」。
+- 局限：DSH **没有官方「工具→插件」归属信息**（dsh-plugin-prune 的 README 也承认这点），映射是尽力而为；纯 UI 插件不注册工具，测不到。
+
 ## 历史窗口工具 ab.py
 - AGENTS 整块注入，单规则摘不干净 → 只做「整块开/关」粗粒度对照。
 - `start`：记录基线（会话/调用/真失败分布）；`check`：对比同签名断点；每臂调用数下限 `MIN_CALLS`。

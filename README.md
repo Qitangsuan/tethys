@@ -32,7 +32,7 @@ node scripts\collect.mjs          # ① 采集：zstd 多帧 → data/raw/*.json
 
 辅助：
 - [前瞻 A/B 设计与运行手册](ab-design.md)：`python scripts/experiment_plan.py` 只复算可行性；`experiment_switch.py` 负责经授权后执行的整块开关。实验期间不要并行运行 `apply.py`、修改规则或用旧日报作中期判决。
-- [规则审计总览](docs/audit-summary.md)：`audit_rules.py`（规则集审查：冗余/覆盖空白/理论收益）、`audit_behavior.py`（行为审计：规则行为是否发生）、`audit_families.py`（失败族聚类）、`audit_models.py`（跨模型失败率）、`audit_rule7_deepdive.py`（规则 7 深挖）。
+- [规则审计总览](docs/audit-summary.md)：`audit_rules.py`（规则集审查：冗余/覆盖空白/理论收益）、`audit_behavior.py`（行为审计：规则行为是否发生）、`audit_families.py`（失败族聚类）、`audit_models.py`（跨模型失败率）、`audit_rule7_deepdive.py`（规则 7 深挖）、`audit_plugins.py`（插件健康度：使用率/失败归因/该卸）。
 - `python scripts/ab.py start|check` —— 旧窗口的历史描述性对比，不记录实际开关，不作前瞻 A/B 结论。
 - `python scripts/audit_sessions.py` —— 数据层普查（重复会话量化）
 - `python scripts/apply.py --revert|--list` —— 回滚 / 查看注入状态
@@ -76,6 +76,7 @@ dsh-evolve/
 │   ├── audit_families.py  失败族聚类（长尾归族）
 │   ├── audit_models.py    跨模型失败率对比
 │   ├── audit_rule7_deepdive.py  规则 7 深挖（测量修正+失败链）
+│   ├── audit_plugins.py   插件健康度审查（使用率/失败归因/该卸）
 │   ├── restore_dist.py    从 AGENTS 注入块恢复规则真源
 │   └── tests/             回归测试（58 项）
 ├── state/

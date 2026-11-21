@@ -33,6 +33,14 @@
 - qwen3.8-flash：9.16%——但样本只有 393 次且被分配了 Cordis inspect 类难任务（**任务偏差**），不能读成「模型差」。
 - 其他模型样本 <400，失败率仅供参考。
 
+## F. 插件健康度审查（2026-11-21）
+
+- 映射 34 个插件工具；调用分布：内置/未识别 45 工具 10,411 调用（失败率 2.8%）、dsh-design-studio 4/51/0%、dsh-plugin-save-token 1/26/0%、@liustack/modlens 1/2/100%、dsh-image-gen 1/1/100%。
+- 「添乱」样本极小（modlens 2 次、image-gen 1 次）——只能说明「这两个工具在这几次调用里失败」，不能推广成「插件不行」。
+- 静默插件（有工具定义、本快照 0 调用）：@yyfather/dsh-mimo-plugin、canvas-workbench、dsh-purge 等——**0 调用 ≠ 该卸**（可能只是没用那个功能）。
+- 与 dsh-plugin-prune 的差异：本表按**失败归因**看插件，不只使用量。
+- 局限：工具→插件归属是「扫 `tools.register({name})` + 已知映射表」拼的，DSH 没有官方归属信息；纯 UI 插件无工具调用，测不到。
+
 ## 复现
 
 ```powershell
