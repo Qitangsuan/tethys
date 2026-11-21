@@ -67,6 +67,14 @@ dist/AGENTS.evolve.md  ──apply.py──▶  ~/.dsh/AGENTS.md（tethys 标记
 - 方案及故障处置见 [ab-design.md](ab-design.md)。`experiment_plan.py` 读冻结任务包估工期；`experiment_switch.py` 管预注册、锁、真实切换读回和回滚；`experiment_meta.py` 提取模型指令暴露佐证。`experiment.py seal` 固定到期后按配对窗口推断，保留一次终末结果。
 - 不改 `classify.py` 的 callId 去重、配置态或 v4 的事件定义，不用 `ready.py` 的 GO 触发提前解盲。
 
+## 规则审计（A–E + 深挖）
+- `audit_rules.py`：规则集审查（键级冗余/覆盖空白/理论收益上限）。
+- `audit_behavior.py`：行为审计（规则要求的行为是否发生；路径规范化+窗口有测量误差，见深挖）。
+- `audit_families.py`：失败族聚类（关键词规则，未归类 4.1%）。
+- `audit_models.py`：跨模型失败率（`model/selection` + `assistant/message.source` 跟踪，fallback 防 unknown）。
+- `audit_rule7_deepdive.py`：规则 7 深挖（测量修正 + `edit_no_match` 失败链）。
+- 全部为**描述性审计**，不作因果结论；汇总结论见 [docs/audit-summary.md](docs/audit-summary.md)。
+
 ## 历史窗口工具 ab.py
 - AGENTS 整块注入，单规则摘不干净 → 只做「整块开/关」粗粒度对照。
 - `start`：记录基线（会话/调用/真失败分布）；`check`：对比同签名断点；每臂调用数下限 `MIN_CALLS`。

@@ -1,14 +1,9 @@
-## 环境事实（TETHYS 自动习得示例）
+## 潮汐（TETHYS）规则｜本机 DSH
 
-> 这是示例模板：用 `apply.py` 前把它复制为 `dist/AGENTS.evolve.md`，按你的环境改写。
-
-- **DSH 的 `pwsh` 工具在 Windows 上跑的是 Windows PowerShell 5.1**：用 `;` 分隔语句，不要用 `&&`；中文路径一律加引号。
-- **`python` / `node` 可能不在 PATH**：先 `load_workspace_dependencies` 拿绝对路径；多行、含中文/正则/引号嵌套的脚本一律先落临时 `.py` 文件再跑。
-- **工具输出约 50KB 封顶**：超长会被截断，先 `Select-Object -First 20`、`Get-Content -TotalCount 50`，确实要全量就先落盘再分段读。
-- **`exit code 1` 常常是假阳性**：命令结尾若停在返回 False 的探测上，整条命令退出码就变 1；收尾补 `; exit 0`。
-- **工具异常先分诊再动手**：宿主抽风（PTY 启动失败、自动审查拦截）与命令无关，原样重试 1 次；provider 配置错误（multiple usable web providers / 401 / 404 api key）重试无用，直接转告用户；`cross-origin redirect to <X>` 按报错给的 X 直接重抓；`rejected input ... must be an object` 参数格式错重试无用，按报错改传参。
-- **动手之前先确认目标存在**：读文件前先 `glob` 定位；命令里引用路径先 `Test-Path`；调 CLI 前先 `Get-Command` 确认它在 PATH 里。
-- **改文件走「读 → 改」闭环，`edit` 失败先分诊**：`file has not been read` 先 read；`file changed since it was read` 重读再改；`old_string was not found` 从最近一次 read 输出原样复制、禁止凭记忆重写；连续 edit/write 之后每次改完都要重新拿最新内容。
-- **`app.asar` 里的路径搜不到**：`grep`/`glob` 底层是 ripgrep，进不了 `resources\app.asar\dsh\`；要读安装目录里的东西，直接用 `read` 工具。
-- **调工具前先把标识符查准，别猜**：`cordis_inspect_query` 的 entry id、`send_message` 的队友名、Service 名先查再调；带必填参数先扫 schema；**`cordis_inspect_query` 的 `input` 必须是对象（空 `{}` 也行）**，传字符串会被拒。
-- **长任务把约束写进文件**：上下文会被动剪除，路径、口径、验收标准落到 todo 或 scratch 文件，需要时重读。
+- **按本机环境执行脚本**：`pwsh` 是 Windows PowerShell 5.1，不用 `&&`；含空格或中文的路径加引号。后一步依赖前一步成功时用 `if ($?)`，不要仅用分号串接。需要 Python 或 Node 时，先用 `load_workspace_dependencies` 返回的绝对路径。多行、含中文、正则或嵌套引号的 Python 先写入 UTF-8 的 `.py` 文件，再用 `& $py -X utf8 $file` 执行；简单单行可用 `-c`。
+- **先缩小输出范围**：查目录、日志或 JSON 时先限定目录、关键词或行数；查 Cordis 时指定 `root` 或用目录模式。结果注明截断时，按需分段读提示的溢出文件，不要把屏幕上最后一行当作数据末尾。
+- **环境故障停止无效重试**：仅遇 PTY 启动失败时原样重试一次；仍失败则报告。自动审查拦截时停止，不换入口绕过。遇 provider 冲突或明确指向密钥配置的错误，报告工具名和脱敏错误摘要；不要仅凭 401／404 判为配置问题。跨域重定向不是重试原地址的理由；仅当目标可信且不携带凭据时改抓提示地址。
+- **路径不确定才定位，越界就改范围**：已知准确路径直接 `read`；凭记忆拼的路径先限定目录 `glob`，找不到先核对父目录。已知目标在 `app.asar` 内则直接 `read`，不靠 `glob`／`grep` 判断文件不存在。读段越界时，按报错行数缩小范围；未知总行数则从文件开头少量读，不原样重试。
+- **编辑失败后重读再改**：已有目标文件的准确原文可直接 `edit`，不为每次编辑强制补读。遇 `file_not_read`、`file_conflict` 或 `edit_no_match`，重读该文件目标段，从最新文本逐字复制能唯一定位的 `old_string` 再改；若目标已改好就停止。共享文件临改前重读目标段，保留他人改动。
+- **动态标识符从清单取**：没有当前清单给出的准确名称时，先用 `listConfigs`、`listService` 或 `list_agents` 查对应条目再调用。报未知条目、服务或队友时，刷新对应清单；找不到就报告，不猜近似名字。
+- **参数类型错，改值再发**：按当前工具的参数定义核对报错字段的类型和必填项。`cordis_inspect_query.input` 传对象，不传序列化后的字符串；无需筛选时传 `{}`。只在修正报错字段后重试；同一错误仍在就报告字段和预期类型。

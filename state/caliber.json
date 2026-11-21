@@ -1,7 +1,7 @@
 {
   "_说明": "口径单一来源（qwen 拍板 C：口径不许做成并列模块，必须是 classify/verify 强制引用的常量源）。改口径必须先改这里 + 登记变更 + 新旧并行回算一个窗口。",
   "version": "caliber-2026-11-20-3",
-  "rulesRevision": "rules-44f7341436",
+  "rulesRevision": "rules-0807c21558",
   "anchors": {
     "errorPrefix": [
       "Error:",
@@ -59,8 +59,14 @@
     "minSessionsPerArm": 10,
     "minPositiveSessionsPerArm": 3,
     "planningPower": 0.8,
-    "planningBaselinePer1000": [5, 20],
-    "planningRR": [0.5, 0.7],
+    "planningBaselinePer1000": [
+      5,
+      20
+    ],
+    "planningRR": [
+      0.5,
+      0.7
+    ],
     "note": "仅升级验证方法，不改事件分类版本。thresholds 内的 v3 参数保留供历史回算，不再作为统计证据。会话数下限是退让策略而非功效保证。"
   },
   "_变更历史": [

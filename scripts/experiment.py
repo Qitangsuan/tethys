@@ -18,11 +18,14 @@ import verify as v
 DAY = 86400000
 FOLLOW = 2 * DAY
 PAIRS = 42
-RULES = ('6', '7', '9')
+def rules_of(effects):
+    """当前规则集的验证族：verify 不是 false 且不是 config_ticket 的规则（规则集变更后自动跟随）。"""
+    return tuple(k for k, cfg in effects['rules'].items()
+                 if cfg.get('verify') is not False and cfg.get('verify_mode') != 'config_ticket')
 # 在正式试验开始前固定。MC 次数、种子与观测结果无关。
 DRAWS = 49999
 SEED = 310728
-TARGET = 6945
+TARGET = 7479  # 2026-11-21 规则集重设计后重算（并集 104 / 9,487 × 簇倍率 1.67266）
 TZ = timezone(timedelta(hours=8))
 
 
@@ -33,12 +36,13 @@ def assigned(plan, at):
 
 def summarise(plan, data, effects, cal, meta):
     v.audit(data, cal)
+    rules = rules_of(effects)
     arms = plan['arms']
     totals = [[0, 0] for _ in arms]  # [n, y]，包括无暴露的随机化窗口
     sessions = {'ON': [], 'OFF': []}
     sub = defaultdict(lambda: {'ON': [0, 0, 0], 'OFF': [0, 0, 0]})
     evidence = {arm: [0, 0] for arm in sessions}  # 已证实分配一致：调用、会话
-    singles = {k: {'ON': 0, 'OFF': 0} for k in RULES}
+    singles = {k: {'ON': 0, 'OFF': 0} for k in rules}
     for s in data['sessionTimeline']:
         i = assigned(plan, s['createdAt'])
         n = s['calls']
@@ -49,7 +53,7 @@ def summarise(plan, data, effects, cal, meta):
         for kind, count in s['kinds'].items():
             if v.is_config_kind(kind, cal['configKinds']):
                 continue
-            matches = [k for k in RULES if v.match_kind(kind, effects['rules'][k])]
+            matches = [k for k in rules if v.match_kind(kind, effects['rules'][k])]
             if matches:
                 y += count
             for k in matches:

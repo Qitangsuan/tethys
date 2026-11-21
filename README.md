@@ -19,7 +19,6 @@
 ## 一轮怎么跑
 
 ```powershell
-# 用你环境里的 python（3.8+）和 node（22+/24+，collect.mjs 需要 Node 的 zstd）
 $py = "python"
 $node = "node"
 Set-Location "path\to\dsh-evolve"
@@ -33,6 +32,7 @@ node scripts\collect.mjs          # ① 采集：zstd 多帧 → data/raw/*.json
 
 辅助：
 - [前瞻 A/B 设计与运行手册](ab-design.md)：`python scripts/experiment_plan.py` 只复算可行性；`experiment_switch.py` 负责经授权后执行的整块开关。实验期间不要并行运行 `apply.py`、修改规则或用旧日报作中期判决。
+- [规则审计总览](docs/audit-summary.md)：`audit_rules.py`（规则集审查：冗余/覆盖空白/理论收益）、`audit_behavior.py`（行为审计：规则行为是否发生）、`audit_families.py`（失败族聚类）、`audit_models.py`（跨模型失败率）、`audit_rule7_deepdive.py`（规则 7 深挖）。
 - `python scripts/ab.py start|check` —— 旧窗口的历史描述性对比，不记录实际开关，不作前瞻 A/B 结论。
 - `python scripts/audit_sessions.py` —— 数据层普查（重复会话量化）
 - `python scripts/apply.py --revert|--list` —— 回滚 / 查看注入状态
@@ -53,6 +53,12 @@ node scripts\collect.mjs          # ① 采集：zstd 多帧 → data/raw/*.json
 
 **关键结论**：三条可验证规则全部**统计不显著**——不是规则没用，是**样本量不够**。样本量规划表显示：检测 50% 降幅需每臂 **~13,075 调用**（基线 5/千次），当前每臂只有 4.4K / 5.1K。要真正验证规则，需要攒更多数据或做前瞻 A/B。
 
+## 规则审计（A–E + 深挖，详见 [docs/audit-summary.md](docs/audit-summary.md)）
+
+- **规则 7 的「没执行」一半是测量误差**：窗口放大后真实「edit 前读同文件」率 **60.8%**（不是 33%）；`edit_no_match` 失败前 37.5% 读过同文件（= 文件变了，不是没读），失败后 62.5% 会重读——**失败分诊行为已在执行**。
+- **失败构成**：环境/工具类约占 67%（exit_code 26.3% + read 15.7% + web 9.6% + 网络 5.5% + 配置/子代理 9.9%），规则能管的约 18%——规则策略有天然天花板。
+- **规则 6 的行为确实被遵循**：read 前 glob 前缀 2.6%→8.6%（3.3 倍），但失败率未显著下降（行为改变未转化为效果）。
+
 ## 目录
 
 ```
@@ -65,8 +71,13 @@ dsh-evolve/
 │   ├── ab.py              A/B 对照（整块开关/调用数下限/同签名断点）
 │   ├── ready.py           频率门槛（含 14 天兜底）
 │   ├── audit_sessions.py  数据层普查（重复会话量化）
+│   ├── audit_rules.py     规则集审查（冗余/覆盖空白/理论收益）
+│   ├── audit_behavior.py  行为审计（规则行为是否发生）
+│   ├── audit_families.py  失败族聚类（长尾归族）
+│   ├── audit_models.py    跨模型失败率对比
+│   ├── audit_rule7_deepdive.py  规则 7 深挖（测量修正+失败链）
 │   ├── restore_dist.py    从 AGENTS 注入块恢复规则真源
-│   └── tests/test_classify.py  回归测试（20 项）
+│   └── tests/             回归测试（58 项）
 ├── state/
 │   ├── caliber.json       口径单一来源（classify/verify 强制引用）
 │   ├── rule-effects.json  规则 → 失败类型映射
@@ -94,9 +105,5 @@ dsh-evolve/
 
 - 砍掉：dashboard/ledger/propose 系统/trend/status/draft/gc/plugin 面板（观察层交给插件）
 - 重写/恢复：collect（重写）、classify（新，去重）、verify（统计版）、apply（恢复）、rule-effects（重建）
-- 新增：audit_sessions（数据层）、ab（历史窗口对比）、ready（门槛）、caliber.json（口径单一来源）、tests
-- 代码量：约 1,200 行（不含实验脚本）
-
-## 许可与支持
-
-MIT License（见 [LICENSE](LICENSE)）。**As-is 参考实现：不承诺维护、不答疑、不跟版本更新**；有需要请自行 fork / 修改。示例规则见 [dist/AGENTS.example.md](dist/AGENTS.example.md)。
+- 新增：audit_sessions（数据层）、audit_rules/behavior/families/models/rule7（规则审计）、ab（历史窗口对比）、experiment_*（前瞻 A/B）、ready（门槛）、ready_check（每日检查）、backup（备份）、caliber.json（口径单一来源）、tests
+- 代码量：约 1,500 行（含审计与实验脚本，不含测试）

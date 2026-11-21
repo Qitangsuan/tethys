@@ -26,7 +26,7 @@ class AssignmentTests(unittest.TestCase):
         self.effects['rules']['6']['detects'].append('file_conflict')
         w,arms,_,evidence,singles=ex.summarise(self.plan,d,self.effects,self.cal,meta)
         self.assertEqual(w[0],[50,4]); self.assertEqual(len(w),84)
-        self.assertEqual(singles['6']['ON'],4); self.assertEqual(singles['7']['ON'],4)
+        self.assertEqual(singles['6']['ON'],4); self.assertEqual(singles['7']['ON'],0)
         self.assertEqual(arms['ON']['n'],50); self.assertEqual(evidence['ON'],[0,0]); self.assertEqual(arms['OFF']['n'],0)
 
     def test_refuse_peeks_and_test_mode(self):
@@ -94,7 +94,7 @@ class AssignmentTests(unittest.TestCase):
 
     def test_frozen_pack_union(self):
         d,e,c=ep.read_sections(); n=sum(s['calls'] for s in d['sessionTimeline']); self.assertEqual(n,9487)
-        self.assertEqual(sum(y for k,y in d['real'].items() if not v.is_config_kind(k,c['configKinds']) and any(v.match_kind(k,e['rules'][j]) for j in ex.RULES)),112)
+        self.assertEqual(sum(y for k,y in d['real'].items() if not v.is_config_kind(k,c['configKinds']) and any(v.match_kind(k,e['rules'][j]) for j in ex.rules_of(e))),112)
         self.assertEqual(math.ceil(v.plan_calls(112/n,.5,.8,.05,1)*1.672660),6945)
 
 if __name__=='__main__': unittest.main()
