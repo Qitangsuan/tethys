@@ -170,5 +170,78 @@ class VerifierTests(unittest.TestCase):
         self.assertIs(audit_plugins.text_of, classify.text_of)
 
 
+class ReadyGateTests(unittest.TestCase):
+    """验证门槛只看后臂规模：刚判完「新增会话=0」不该让门槛永远显示 0（2026-11-24 修）。"""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+        self.raw = self.tmp / "raw"
+        self.raw.mkdir()
+        self.effects = self.tmp / "effects.json"
+        self.effects.write_text(json.dumps({"rules": {"1": {"since": "2026-11-21"}}}), encoding="utf-8")
+        self.caliber = self.tmp / "caliber.json"
+        self.caliber.write_text(json.dumps({"statistics": {"minSessionsPerArm": 10}}), encoding="utf-8")
+
+    def run_ready(self, signals, sources=0):
+        sig = self.tmp / "signals.json"
+        sig.write_text(json.dumps(signals), encoding="utf-8")
+        output = io.StringIO()
+        with patch.object(ready, "RAW", str(self.raw)), patch.object(ready, "SIGNALS", str(sig)), \
+                patch.object(ready, "EFFECTS", str(self.effects)), patch.object(ready, "CALIBER", str(self.caliber)), \
+                patch.object(ready, "count_src", return_value=sources), redirect_stdout(output):
+            code = ready.main()
+        return code, output.getvalue()
+
+    def base(self, timeline):
+        return dict(generatedAt=datetime.now().isoformat(), sessions=1, rawSessionIds=["s"],
+                    uniqueCalls=10, sessionTimeline=timeline)
+
+    @staticmethod
+    def post_ms(days=1):
+        base = datetime(2026, 11, 22, tzinfo=__import__("datetime").timezone.utc)
+        return int((base + __import__("datetime").timedelta(days=days - 1)).timestamp() * 1000)
+
+    def test_post_arm_short_is_not_verify(self):
+        timeline = [dict(session="s", createdAt=self.post_ms(), calls=10, realFails=0, kinds={})]
+        code, text = self.run_ready(self.base(timeline))
+        self.assertEqual(code, 1)
+        self.assertIn("VERDICT=none", text)
+        self.assertIn("后臂（since 2026-11-21 之后）：1 个有调用会话 / 10 次调用", text)
+        self.assertIn("还需", text)  # 把差距与 ETA 摊开
+
+    def test_post_arm_meeting_both_floors_is_verify(self):
+        timeline = [dict(session=f"s{i}", createdAt=self.post_ms(), calls=250, realFails=0, kinds={})
+                    for i in range(10)]
+        code, text = self.run_ready(self.base(timeline))
+        self.assertEqual(code, 0)
+        self.assertIn("VERDICT=verify", text)
+        self.assertIn("后臂会话 10 ≥ 10", text)
+        self.assertIn("后臂调用 2500 ≥ 2000", text)
+
+    def test_pre_arm_calls_do_not_count(self):
+        timeline = [dict(session="old", createdAt=self.post_ms(-3), calls=9000, realFails=0, kinds={})]
+        code, text = self.run_ready(self.base(timeline))
+        self.assertIn("VERDICT=none", text)
+        self.assertIn("0 个有调用会话 / 0 次调用", text)
+
+    def test_new_family_backfill_before_previous_judge_is_ignored(self):
+        prev = (datetime.now() - __import__("datetime").timedelta(days=1)).isoformat()
+        old = int((datetime.now() - __import__("datetime").timedelta(days=3)).timestamp() * 1000)
+        sig = dict(newKinds=["k"], real={"k": 3}, samples={"k": [{"time": old}]}, previousGeneratedAt=prev)
+        self.assertEqual(ready.find_new_families(sig), [])
+
+    def test_new_family_after_previous_judge_is_reported(self):
+        prev = (datetime.now() - __import__("datetime").timedelta(days=1)).isoformat()
+        fresh = int(datetime.now().timestamp() * 1000)
+        sig = dict(newKinds=["k"], real={"k": 3}, samples={"k": [{"time": fresh}]}, previousGeneratedAt=prev)
+        self.assertEqual(ready.find_new_families(sig), [("k", 3)])
+
+    def test_new_family_without_time_evidence_is_kept(self):
+        sig = dict(newKinds=["k"], real={"k": 3}, samples={}, previousGeneratedAt="2026-11-24T00:00:00")
+        self.assertEqual(ready.find_new_families(sig), [("k", 3)])
+
+
 if __name__ == "__main__":
     unittest.main()

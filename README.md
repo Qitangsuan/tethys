@@ -4,6 +4,8 @@
 
 2026-11-20 重建：旧项目代码/状态丢失，幸存的是 `~/.dsh/AGENTS.md` 的规则注入块、`~/.dsh/sessions` 的会话轨迹、`memory/PROJECTS.md` 的状态记录。本版按 v0.2 规格重写（四模型评审 + qwen 拍板）。
 
+2026-11-24：新规则集注入满 3 天后的核算发现**结果层验证在自然使用下不可达**（后臂 2 会话 / 64 调用，距功效规划 13,075 调用约 610 天）——见 [数据现状与路线判断](docs/data-reality.md)。同轮修掉 `ready.py` 的 GO 误报与后臂门槛口径，并转正[框架挑战](docs/framework-challenge.md)。
+
 ## 定位
 
 | 层 | 做什么 | 谁做 |
@@ -26,9 +28,12 @@ Set-Location "path\to\dsh-evolve"
 node scripts\collect.mjs          # ① 采集：zstd 多帧 → data/raw/*.jsonl
 & $py -X utf8 scripts\classify.py # ② 判定：事件锚点契约 + callId 去重 → data/signals/failReasons.json
 & $py -X utf8 scripts\verify.py   # ③ 验证：规则效果判决 → data/verify/<date>.md
-& $py -X utf8 scripts\ready.py    # ④ 门槛：数据够不够开轮次（新会话≥5 / 新调用≥2000 / 14 天兜底）
+& $py -X utf8 scripts\ready.py    # ④ 门槛：分三级 verify（样本够出判决）/ work（只可归因）/ none
 & $py -X utf8 scripts\apply.py    # ⑤ 注入：dist/AGENTS.evolve.md → ~/.dsh/AGENTS.md（幂等）
 ```
+
+`ready.py` 的验证门槛看**后臂规模**（规则 `since` 之后的会话数 ≥ `caliber.statistics.minSessionsPerArm`、
+调用数 ≥ 2,000），不看「上次判定以来的新增」——后者刚判完就归零。未达时它会直接报还差多少天。
 
 辅助：
 - **公开镜像说明**：GitHub 公开版只含代码与示例规则（`dist/AGENTS.example.md`），不含 `data/` 会话数据与 `dist/AGENTS.evolve.md` 真源——`apply.py` 需要本机真源，可用 `restore_dist.py` 从本机注入块恢复，或换用示例规则。
@@ -37,7 +42,7 @@ node scripts\collect.mjs          # ① 采集：zstd 多帧 → data/raw/*.json
 - `python scripts/ab.py start|check` —— 旧窗口的历史描述性对比，不记录实际开关，不作前瞻 A/B 结论。
 - `python scripts/audit_sessions.py` —— 数据层普查（重复会话量化）
 - `python scripts/apply.py --revert|--list` —— 回滚 / 查看注入状态
-- `python -m unittest discover -s scripts/tests` —— 回归测试（75 项）
+- `python -m unittest discover -s scripts/tests` —— 回归测试（81 项）
 
 ## 旧规则集验证结论（仅适用 2026-11-20 的 10 条规则集；现行 7 条尚无数据）
 
@@ -55,6 +60,13 @@ node scripts\collect.mjs          # ① 采集：zstd 多帧 → data/raw/*.json
 | 3/8/10 | 不可验证 | 口径修正类 / 无单一 failKind |
 
 **关键结论**：三条可验证规则全部**统计不显著**——不是规则没用，是**样本量不够**。样本量规划表显示：检测 50% 降幅需每臂 **~13,075 调用**（基线 5/千次），当前每臂只有 4.4K / 5.1K。要真正验证规则，需要攒更多数据或做前瞻 A/B。
+
+## 数据现状（2026-11-24 实测，详见 [data-reality.md](docs/data-reality.md)）
+
+- 后臂（`since=2026-11-21`）只有 **2 个真实会话 / 64 次调用**：52 次来自 11-23 一次会话、13 次来自当前会话；其余新解压会话是 workflow 子代理（不调工具）与补采的历史会话。
+- 按 21.3 调用/天算：达 2,000 调用下限还需 ~91 天，达功效规划的 13,075 调用还需 **~610 天**。
+- 因此「样本量差 3 倍」的旧判断要更正：在结果层，差距是**约 200 倍**，靠自然使用攒不出来。
+- 三条出路（主动 A/B / 判据下沉行为层 / 改投环境治理）与代价见文档；其中行为层判据是当下唯一能立刻出结论的，环境治理 ROI 最高。
 
 ## 规则审计（A–E + 深挖，详见 [docs/audit-summary.md](docs/audit-summary.md)）
 
@@ -92,9 +104,14 @@ dsh-evolve/
 │   ├── raw/               解压后的会话事件（74 会话，可重建）
 │   ├── signals/           判定输出（failReasons.json）
 │   ├── verify/            验证报告
-│   ├── audit/             普查与审计报告（重复会话 / A–F / 规则 7 深挖）
+│   ├── audit/             普查与审计报告（重复会话 / A–F / 规则 7 深挖 / 插件健康度）
 │   └── ab/                A/B 基线
-└── docs/                  设计文档
+└── docs/
+    ├── statistics-design.md    统计设计（会话聚类 RR + 功效规划）
+    ├── ab-design.md            前瞻 A/B 设计与运行手册
+    ├── audit-summary.md        规则审计总览
+    ├── data-reality.md         数据现状与路线判断（2026-11-24）
+    └── framework-challenge.md  框架挑战 2 模型裁决（归档，不落地）
 ```
 
 ## 设计原则（v0.2 四模型评审结论）

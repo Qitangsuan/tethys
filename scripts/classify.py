@@ -174,9 +174,12 @@ def main():
     hist_path = os.path.join(OUT_DIR, "kind-history.json")
     cur_kinds = set(real.keys())
     prev_kinds = cur_kinds
+    prev_updated = None
     if os.path.exists(hist_path):
         try:
-            prev_kinds = set(_read_json(hist_path).get("kinds") or [])
+            hist = _read_json(hist_path)
+            prev_kinds = set(hist.get("kinds") or [])
+            prev_updated = hist.get("updatedAt")
         except Exception:
             prev_kinds = cur_kinds
     new_kinds = sorted(cur_kinds - prev_kinds)
@@ -188,6 +191,8 @@ def main():
         "caliber": CALIBER,
         "previousKinds": sorted(prev_kinds),
         "newKinds": new_kinds,
+        # 上次判定时间（ISO，本地时区）；ready 用它区分「新出现的失败族」与「新采到的旧失败」
+        "previousGeneratedAt": prev_updated,
         "generatedAt": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
         "sessions": len(files),
         "rawSessionIds": [os.path.splitext(os.path.basename(fp))[0] for fp in files],  # ready 的完整快照名册

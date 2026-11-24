@@ -1,6 +1,6 @@
 {
   "_说明": "口径单一来源（qwen 拍板 C：口径不许做成并列模块，必须是 classify/verify 强制引用的常量源）。改口径必须先改这里 + 登记变更 + 新旧并行回算一个窗口。",
-  "version": "caliber-2026-11-20-3",
+  "version": "caliber-2026-11-24-1",
   "rulesRevision": "rules-0807c21558",
   "anchors": {
     "errorPrefix": [
@@ -39,7 +39,8 @@
     "cross-origin redirect",
     "api key",
     "HTTP 401",
-    "HTTP 404"
+    "HTTP 404",
+    "REMOTE_DISCOVERY_FAILED"
   ],
   "dedup": {
     "by": "callId",
@@ -72,6 +73,11 @@
     "note": "仅升级验证方法，不改事件分类版本。thresholds 内的 v3 参数保留供历史回算，不再作为统计证据。会话数下限是退让策略而非功效保证。"
   },
   "_变更历史": [
+    {
+      "date": "2026-11-24",
+      "version": "caliber-2026-11-24-1",
+      "change": "REMOTE_DISCOVERY_FAILED 计入配置态剔除：remote_list_hosts 报「检查 Remote 登录/主机可用性/身份信任」= 本机 Remote 面板未配置或无在线主机，与 API 未配置同类（设计原则 5：反配置态污染）。该族 5 次全在单个会话且在 11-21 规则窗口内，规则管不了它，留在分子只会稀释效应。"
+    },
     {
       "date": "2026-11-20",
       "version": "session-rr-v1",
