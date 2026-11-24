@@ -31,15 +31,18 @@ node scripts\collect.mjs          # ① 采集：zstd 多帧 → data/raw/*.json
 ```
 
 辅助：
+- **公开镜像说明**：GitHub 公开版只含代码与示例规则（`dist/AGENTS.example.md`），不含 `data/` 会话数据与 `dist/AGENTS.evolve.md` 真源——`apply.py` 需要本机真源，可用 `restore_dist.py` 从本机注入块恢复，或换用示例规则。
 - [前瞻 A/B 设计与运行手册](ab-design.md)：`python scripts/experiment_plan.py` 只复算可行性；`experiment_switch.py` 负责经授权后执行的整块开关。实验期间不要并行运行 `apply.py`、修改规则或用旧日报作中期判决。
 - [规则审计总览](docs/audit-summary.md)：`audit_rules.py`（规则集审查：冗余/覆盖空白/理论收益）、`audit_behavior.py`（行为审计：规则行为是否发生）、`audit_families.py`（失败族聚类）、`audit_models.py`（跨模型失败率）、`audit_rule7_deepdive.py`（规则 7 深挖）、`audit_plugins.py`（插件健康度：使用率/失败归因/该卸）。
 - `python scripts/ab.py start|check` —— 旧窗口的历史描述性对比，不记录实际开关，不作前瞻 A/B 结论。
 - `python scripts/audit_sessions.py` —— 数据层普查（重复会话量化）
 - `python scripts/apply.py --revert|--list` —— 回滚 / 查看注入状态
-- `python -m unittest discover -s scripts/tests` —— 回归测试
+- `python -m unittest discover -s scripts/tests` —— 回归测试（75 项）
 
-## 首次验证结论（2026-11-20 快照：74 会话 / 10,323 调用（唯一 9,487）/ 真失败 290）
+## 旧规则集验证结论（仅适用 2026-11-20 的 10 条规则集；现行 7 条尚无数据）
 
+> **注意：本表判决的是旧 10 条规则集，不能用于现行 7 条规则集。** 2026-11-21 规则集已重设计（10→7 条，全部 `since=2026-11-21`），新旧块需重新攒数据或前瞻 A/B 才能比较。快照：74 会话 / 10,323 调用（唯一 9,487）/ 真失败 290。
+>
 > 验证方法：**会话聚类事件率比较**（RR + 聚类 CI + Bonferroni 校正），见 [statistics-design.md](statistics-design.md)。旧阈值版报告留档 `data/verify/2026-11-20.md`。
 
 | 规则 | 判决 | 证据 |
@@ -78,17 +81,18 @@ dsh-evolve/
 │   ├── audit_rule7_deepdive.py  规则 7 深挖（测量修正+失败链）
 │   ├── audit_plugins.py   插件健康度审查（使用率/失败归因/该卸）
 │   ├── restore_dist.py    从 AGENTS 注入块恢复规则真源
-│   └── tests/             回归测试（58 项）
+│   ├── publish_public.py  公开镜像一键更新（脱敏→扫描→推送）
+│   └── tests/             回归测试（75 项）
 ├── state/
 │   ├── caliber.json       口径单一来源（classify/verify 强制引用）
 │   ├── rule-effects.json  规则 → 失败类型映射
 │   └── backup/            apply 前的 AGENTS.md 备份
-├── dist/AGENTS.evolve.md  规则真源（10 条）
+├── dist/AGENTS.evolve.md  规则真源（7 条）
 ├── data/
 │   ├── raw/               解压后的会话事件（74 会话，可重建）
 │   ├── signals/           判定输出（failReasons.json）
 │   ├── verify/            验证报告
-│   ├── audit/             普查结果（重复会话）
+│   ├── audit/             普查与审计报告（重复会话 / A–F / 规则 7 深挖）
 │   └── ab/                A/B 基线
 └── docs/                  设计文档
 ```
@@ -102,9 +106,17 @@ dsh-evolve/
 5. **反配置态污染**：provider 歧义/跨域重定向/api key 等环境问题从真失败剔除，否则稀释所有效应量。
 6. **频率跟数据走**：新会话 ≥5 / 新调用 ≥2000 / 新失败族 / 14 天兜底，任一满足才开轮次。
 
+## 测量对象漂移（重要）
+
+平台模型路由会随换代漂移（实测：`deepseek-v4-pro` 选项背后路由的是 V4.1 flash），**测量对象不是固定的**。因此：
+
+- 历史结论**只对当时的模型路由成立**；跨代数据不可直接比较，换代后旧结论需重新检验。
+- 口径（`caliber.json`）记录判定口径，**不记录模型版本**——比较跨代数据时必须同时核对当时的模型路由。
+- 规则集里的「环境事实」（PowerShell 5.1、工具行为）同理：换代后可能失效，需按审计重验。
+
 ## 与旧版（3,500 行）的差异
 
 - 砍掉：dashboard/ledger/propose 系统/trend/status/draft/gc/plugin 面板（观察层交给插件）
 - 重写/恢复：collect（重写）、classify（新，去重）、verify（统计版）、apply（恢复）、rule-effects（重建）
-- 新增：audit_sessions（数据层）、audit_rules/behavior/families/models/rule7（规则审计）、ab（历史窗口对比）、experiment_*（前瞻 A/B）、ready（门槛）、ready_check（每日检查）、backup（备份）、caliber.json（口径单一来源）、tests
-- 代码量：约 1,500 行（含审计与实验脚本，不含测试）
+- 新增：audit_sessions（数据层）、audit_rules/behavior/families/models/rule7/plugins（规则审计 + 插件健康度）、ab（历史窗口对比）、experiment_*（前瞻 A/B）、ready（门槛）、ready_check（每日检查）、backup（备份）、publish_public（公开镜像）、caliber.json（口径单一来源）、tests、git 版本控制
+- 代码量：约 4,000 行（scripts ~3,300 + tests ~700，不含数据/状态）
