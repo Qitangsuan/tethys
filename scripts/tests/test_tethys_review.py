@@ -243,5 +243,59 @@ class ReadyGateTests(unittest.TestCase):
         self.assertEqual(ready.find_new_families(sig), [("k", 3)])
 
 
+class ClassifyRobustnessTests(unittest.TestCase):
+    """观测器不许静默失明：跨行 JSON、裸换行、坏历史、有调用无结果，都要能看见。"""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = Path(temp.name)
+        self.raw = self.tmp / "raw"
+        self.raw.mkdir()
+        self.out = self.tmp / "out"
+        self.out.mkdir()
+
+    def run_classify(self):
+        buffer = io.StringIO()
+        with patch.object(classify, "RAW", str(self.raw)), patch.object(classify, "OUT_DIR", str(self.out)), \
+                redirect_stdout(buffer):
+            classify.main()
+        return buffer.getvalue(), json.loads((self.out / "failReasons.json").read_text(encoding="utf-8"))
+
+    def write(self, name, lines):
+        (self.raw / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_multiline_json_is_reassembled(self):
+        call = json.dumps({"type": "tool/call", "seq": 1, "data": {"callId": "c1", "name": "edit"}})
+        # 一条记录被裸换行切成两行（写盘时未转义），与真实会话里的形态一致
+        res = ('{"type":"tool/result","seq":2,"data":{"message":{"role":"tool","toolCallId":"c1",'
+               '"content":[{"type":"text","text":')
+        tail = '"Error: file has not been read"}]}}}'
+        self.write("s1.jsonl", [json.dumps({"type": "session", "createdAt": 1000}), call, res, tail])
+        text, data = self.run_classify()
+        self.assertEqual(data["badLines"], 0, text)
+        self.assertEqual(data["uniqueCalls"], 1)
+        self.assertEqual(data["real"].get("file_not_read"), 1)
+        self.assertEqual(data["orphanCalls"], 0)
+
+    def test_call_without_result_is_counted(self):
+        call = json.dumps({"type": "tool/call", "seq": 1, "data": {"callId": "c1", "name": "read"}})
+        self.write("s1.jsonl", [json.dumps({"type": "session", "createdAt": 1000}), call])
+        _text, data = self.run_classify()
+        self.assertEqual(data["orphanCalls"], 1)
+
+    def test_corrupt_history_is_flagged_not_swallowed(self):
+        (self.out / "kind-history.json").write_text("{ not json", encoding="utf-8")
+        call = json.dumps({"type": "tool/call", "seq": 1, "data": {"callId": "c1", "name": "edit"}})
+        res = json.dumps({"type": "tool/result", "seq": 2,
+                          "data": {"message": {"role": "tool", "toolCallId": "c1",
+                                               "content": [{"type": "text", "text": "Error: file has not been read"}]}}})
+        self.write("s1.jsonl", [json.dumps({"type": "session", "createdAt": 1000}), call, res])
+        text, data = self.run_classify()
+        self.assertFalse(data["previousHistoryOk"])
+        self.assertEqual(len(data["newKinds"]), 1)  # 保守：坏历史时全部按新族重报
+        self.assertIn("kind-history", text)
+
+
 if __name__ == "__main__":
     unittest.main()

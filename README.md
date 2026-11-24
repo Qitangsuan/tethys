@@ -42,7 +42,7 @@ node scripts\collect.mjs          # ① 采集：zstd 多帧 → data/raw/*.json
 - `python scripts/ab.py start|check` —— 旧窗口的历史描述性对比，不记录实际开关，不作前瞻 A/B 结论。
 - `python scripts/audit_sessions.py` —— 数据层普查（重复会话量化）
 - `python scripts/apply.py --revert|--list` —— 回滚 / 查看注入状态
-- `python -m unittest discover -s scripts/tests` —— 回归测试（81 项）
+- `python -m unittest discover -s scripts/tests` —— 回归测试（84 项）
 
 ## 旧规则集验证结论（仅适用 2026-11-20 的 10 条规则集；现行 7 条尚无数据）
 

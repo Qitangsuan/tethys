@@ -205,6 +205,13 @@ def main():
         est_new_calls = int(new_sessions * avg_calls)
         notes.append(f"新增口径：{basis}；新增会话 {new_sessions}，估算新增调用 {est_new_calls}")
 
+        # 观测器自检：数据缺口和历史损坏都要说出来，不许静默当正常（v1 教训）
+        if signals.get("previousHistoryOk") is False:
+            notes.append("!! kind-history 损坏：本轮新失败族按全量重报，判据不可信，先查 data/signals/kind-history.json")
+        if signals.get("badLines") or signals.get("unreadableSessions"):
+            notes.append(f"!! 判定数据缺口：无法解析的原始行 {signals.get('badLines', 0)}、"
+                         f"读不出的会话 {signals.get('unreadableSessions', 0)}")
+
         # 验证判决只看后臂规模：verify 按规则 since 分臂，后臂不够就只是归因轮。
         arm = post_arm(signals) if signals.get("sessionTimeline") else None
         if arm:

@@ -107,24 +107,60 @@ def main():
     unique_calls = 0
     dup_calls = 0
     unrouted = 0
+    bad_lines = 0
+    unreadable = 0
+    orphan_calls = 0
     seen_calls = set()
 
     for fp in files:
         sid = os.path.basename(fp).replace(".jsonl", "")
         calls = {}
+        resolved = set()
         created_at = None
         session_calls = 0
         session_fails = 0
         session_kinds = {}
         try:
-            lines = _read_text(fp).splitlines()
+            text = _read_text(fp)
         except Exception:
+            unreadable += 1
             continue
-        for line in lines:
-            try:
-                o = json.loads(line)
-            except Exception:
+        if not text.strip():
+            unreadable += 1
+            continue
+        # keepends：保留原始分隔符，拼接时才能原样还原被拆开的记录
+        lines = text.splitlines(keepends=True)
+        i = 0
+        n_lines = len(lines)
+        while i < n_lines:
+            if not lines[i].strip():
+                i += 1
                 continue
+            # 容错解析：tool/result 正文可能带裸换行（写盘时未转义），导致一条 JSON 被行切成多行。
+            # 两级修复：① keepends 原样拼回（正常的多行 JSON / \u2028 类分隔）；② 把裸换行转义回 \n 再解。
+            # 最多拼 32 行；全失败才记坏行（不静默吞）。
+            o = None
+            span = 1
+            while span <= 32 and i + span <= n_lines:
+                raw = "".join(lines[i:i + span])
+                try:
+                    o = json.loads(raw)
+                    break
+                except Exception:
+                    pass
+                if span > 1:
+                    try:
+                        esc = raw.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\r")
+                        o = json.loads(esc)
+                        break
+                    except Exception:
+                        pass
+                span += 1
+            if o is None:
+                bad_lines += 1
+                i += 1
+                continue
+            i += span
             typ = o.get("type")
             d = o.get("data") or {}
             if typ == "session" and created_at is None:
@@ -142,6 +178,7 @@ def main():
                 if not call:
                     unrouted += 1
                     continue
+                resolved.add(cid)
                 if cid in seen_calls:
                     dup_calls += 1
                     continue
@@ -163,6 +200,8 @@ def main():
                         "tool": call["name"],
                         "first_line": txt.strip().splitlines()[0][:200] if txt.strip() else "",
                     })
+        # 有 call 没有 result 的（用户中断、会话被截断、或解析失败）——报出来，别当不存在
+        orphan_calls += sum(1 for cid in calls if cid not in resolved)
         if session_calls:
             timeline.append({
                 "session": sid, "createdAt": created_at,
@@ -171,17 +210,23 @@ def main():
             })
 
     # H6：新失败族检测（相对上次判定的新增 kind；首跑建立基线、不报新）
+    # 观测器不许静默失明（v1 教训：doctor.py 把坏 JSON 吞成 OK，44 轮「指标干净」全建在会说谎的自检上）：
+    # kind-history 读不出来时不再当作「全部已知」，而是按全量重报并显式告警，让上层看见。
     hist_path = os.path.join(OUT_DIR, "kind-history.json")
     cur_kinds = set(real.keys())
     prev_kinds = cur_kinds
     prev_updated = None
+    history_ok = True
     if os.path.exists(hist_path):
         try:
             hist = _read_json(hist_path)
             prev_kinds = set(hist.get("kinds") or [])
             prev_updated = hist.get("updatedAt")
-        except Exception:
-            prev_kinds = cur_kinds
+        except Exception as exc:
+            history_ok = False
+            prev_kinds = set()
+            print(f"[classify] !! kind-history.json 读取失败（{type(exc).__name__}: {exc}）；"
+                  f"本轮按全量重报新失败族，不静默吞掉")
     new_kinds = sorted(cur_kinds - prev_kinds)
     _write_text(hist_path, json.dumps(
         {"updatedAt": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
@@ -193,6 +238,8 @@ def main():
         "newKinds": new_kinds,
         # 上次判定时间（ISO，本地时区）；ready 用它区分「新出现的失败族」与「新采到的旧失败」
         "previousGeneratedAt": prev_updated,
+        # false = 历史不可读、本轮新族判定不可信；ready 要把它当告警，不当正常
+        "previousHistoryOk": history_ok,
         "generatedAt": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
         "sessions": len(files),
         "rawSessionIds": [os.path.splitext(os.path.basename(fp))[0] for fp in files],  # ready 的完整快照名册
@@ -200,6 +247,9 @@ def main():
         "uniqueCalls": unique_calls,
         "duplicatedCalls": dup_calls,
         "unroutedResults": unrouted,
+        "badLines": bad_lines,
+        "unreadableSessions": unreadable,
+        "orphanCalls": orphan_calls,
         "real": dict(sorted(real.items(), key=lambda kv: -kv[1])),
         "excluded": dict(sorted(excluded.items(), key=lambda kv: -kv[1])),
         "samples": samples,
@@ -210,6 +260,9 @@ def main():
 
     print(f"[classify] 会话 {out['sessions']} / 调用 {total_calls}（唯一 {unique_calls}，重复 {dup_calls} / "
           f"{(dup_calls / total_calls * 100 if total_calls else 0):.1f}%）/ 未配对 {unrouted}")
+    if bad_lines or unreadable or orphan_calls:
+        print(f"[classify] !! 数据缺口：无法解析的行 {bad_lines}，读不出的会话 {unreadable}，"
+              f"有调用无结果的 {orphan_calls}（不是 0 才算正常）")
     print(f"[classify] 真失败 {sum(real.values())}:")
     for k, n in out["real"].items():
         print(f"  {k}: {n}")
