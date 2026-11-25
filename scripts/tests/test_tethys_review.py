@@ -297,5 +297,76 @@ class ClassifyRobustnessTests(unittest.TestCase):
         self.assertIn("kind-history", text)
 
 
+class BehaviorAuditTests(unittest.TestCase):
+    """行为层口径：只测「规则要求的行为出现没」，且现行 R4 与旧版方向相反。"""
+
+    def setUp(self):
+        self.since = int(datetime(2026, 11, 21, tzinfo=__import__("datetime").timezone.utc).timestamp() * 1000)
+        self.post = self.since + 86400000
+        self.pre = self.since - 86400000
+
+    @staticmethod
+    def ev(tool, failed=False, text="", path=None, args=None):
+        a = dict(args or {})
+        if path:
+            a["file_path"] = path
+        return dict(tool=tool, args=a, seq=0, failed=failed, text=text.lower())
+
+    def run_audit(self, events, created=None):
+        import audit_behavior as ab
+        return ab.audit([("s1", created if created is not None else self.post, events)], self.since)
+
+    def test_r5_edit_fail_then_read_is_compliant(self):
+        events = [
+            self.ev("edit", failed=True, text="Error: old_string was not found", path="a.txt"),
+            self.ev("read", path="a.txt"),
+        ]
+        s = self.run_audit(events)
+        self.assertEqual(s["R5_reread"]["post"], [1, 1])
+
+    def test_r5_edit_fail_then_edit_again_is_violation(self):
+        events = [
+            self.ev("edit", failed=True, text="Error: file has not been read", path="a.txt"),
+            self.ev("edit", path="a.txt"),
+        ]
+        s = self.run_audit(events)
+        self.assertEqual(s["R5_reread"]["post"], [0, 1])
+
+    def test_r4_overlocate_flags_redundant_glob(self):
+        events = [self.ev("glob"), self.ev("read", path="a.txt")]
+        s = self.run_audit(events)
+        self.assertEqual(s["R4_overlocate"]["post"], [0, 1])
+
+        events = [self.ev("read", path="a.txt")]
+        s = self.run_audit(events)
+        self.assertEqual(s["R4_overlocate"]["post"], [1, 1])
+
+    def test_r6_only_counts_list_within_window(self):
+        # 清单调用在 20 个调用之前 → 不在 10 调用窗口内，不算符合
+        far = [self.ev("list_agents")] + [self.ev("read", path=f"{i}.txt") for i in range(12)]
+        near_fail = self.ev("cordis_inspect_query", failed=True,
+                            text='Error: unknown entry id "x"')
+        s = self.run_audit(far + [near_fail])
+        self.assertEqual(s["R6_list_first"]["post"], [0, 1])
+
+        near = [self.ev("read", path="y.txt"), self.ev("list_agents"), near_fail]
+        s = self.run_audit(near)
+        self.assertEqual(s["R6_list_first"]["post"], [1, 1])
+
+    def test_arms_split_by_session_created_at(self):
+        events = [self.ev("read", path="a.txt")]
+        s = self.run_audit(events, created=self.pre)
+        self.assertEqual(s["R4_overlocate"]["pre"], [1, 1])
+        self.assertEqual(s["R4_overlocate"]["post"], [0, 0])
+
+    def test_r1_flags_shell_and_operator(self):
+        events = [
+            self.ev("pwsh", args={"command": "a && b"}),
+            self.ev("pwsh", args={"command": "a; b"}),
+        ]
+        s = self.run_audit(events)
+        self.assertEqual(s["R1_ps51"]["post"], [1, 2])
+
+
 if __name__ == "__main__":
     unittest.main()
