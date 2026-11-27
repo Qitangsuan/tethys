@@ -211,6 +211,25 @@ class ReadyGateTests(unittest.TestCase):
         self.assertIn("后臂（since 2026-11-21 之后）：1 个有调用会话 / 10 次调用", text)
         self.assertIn("还需", text)  # 把差距与 ETA 摊开
 
+    def test_short_window_has_no_eta_numbers(self):
+        """窗口 < 3 天不许报 ETA：几小时窗口会把「调用/天」放大成荒谬数字（例如 5 次 → 399 天）。"""
+        from datetime import timedelta, timezone
+        now = datetime.now(timezone.utc)
+        since = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        self.effects.write_text(json.dumps({"rules": {"1": {"since": since}}}), encoding="utf-8")
+        timeline = [dict(session="s", createdAt=int(now.timestamp() * 1000), calls=5, realFails=0, kinds={})]
+        code, text = self.run_ready(self.base(timeline))
+        self.assertEqual(code, 1)
+        self.assertIn("样本太少，无法估算", text)
+        self.assertNotIn("还需 ~", text)
+
+    def test_eta_note_keeps_old_numbers_once_window_is_long_enough(self):
+        """窗口 ≥ 3 天时 ETA 口径不变（回归：别把正常路径也砍掉）。"""
+        from datetime import timezone
+        note = ready.eta_note(5, "2026-11-21", datetime(2026, 11, 27, 12, tzinfo=timezone.utc))
+        self.assertIn("按当前", note)
+        self.assertIn("还需 ~", note)
+
     def test_post_arm_meeting_both_floors_is_verify(self):
         timeline = [dict(session=f"s{i}", createdAt=self.post_ms(), calls=250, realFails=0, kinds={})
                     for i in range(10)]

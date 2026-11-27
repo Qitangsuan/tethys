@@ -43,6 +43,7 @@ MIN_ARM_CALLS = 2000   # 后臂调用下限（占位门槛；真实功效下限�
 STAT_POWER_CALLS = 13075  # 检测 50% 降幅所需每臂调用（基线 5/千次，power 0.8，Bonferroni m=4）
 FALLBACK_DAYS = 14
 MIN_NEW_FAMILY = 2
+MIN_ETA_WINDOW_DAYS = 3  # 观测窗口短于此天数不给 ETA：几小时窗口会把「调用/天」放大成荒谬数字
 
 
 def _read_json(path):
@@ -143,6 +144,28 @@ def post_arm(signals):
     return g, n, since
 
 
+def eta_note(arm_calls, since, now=None):
+    """按后臂样本估算攒到门槛要多久；窗口不足 MIN_ETA_WINDOW_DAYS 天时只报样本太少。
+
+    刚重置（since 就是今天或昨天）时调用绝对量很小，拿几天当分母会把速度放大成
+    荒谬值（5 次调用 / 1 天 → 5.0 次/天 → 还要 399 天）。窗口不足时不给数字，
+    避免拿噪声当趋势；窗口够了再按旧口径算。
+    """
+    now = now or datetime.now(timezone.utc)
+    since_dt = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    window_days = (now - since_dt).days
+    if window_days < MIN_ETA_WINDOW_DAYS:
+        return f"样本太少，无法估算（窗口 {max(0, window_days)} 天）"
+    days = max(1, window_days)
+    per_day = arm_calls / days
+    if per_day > 0:
+        eta_floor = max(0.0, (MIN_ARM_CALLS - arm_calls) / per_day)
+        eta_power = max(0.0, (STAT_POWER_CALLS - arm_calls) / per_day)
+        return (f"按当前 {per_day:.1f} 调用/天：达 {MIN_ARM_CALLS} 调用还需 ~{eta_floor:.0f} 天，"
+                f"达功效规划 {STAT_POWER_CALLS} 调用还需 ~{eta_power:.0f} 天")
+    return "后臂没有真实使用，无法估算攒样本速度"
+
+
 def min_sessions_per_arm():
     try:
         return int(_read_json(CALIBER)["statistics"]["minSessionsPerArm"])
@@ -227,16 +250,7 @@ def main():
                 notes.append("后臂样本不足 —— 只能出行为层/归因结论，不能出效果判决")
                 # 把「还差多久」摊开：这是路线判断的依据，不是催数据
                 try:
-                    since_dt = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                    days = max(1, (datetime.now(timezone.utc) - since_dt).days)
-                    per_day = arm_calls / days
-                    if per_day > 0:
-                        eta_floor = max(0.0, (MIN_ARM_CALLS - arm_calls) / per_day)
-                        eta_power = max(0.0, (STAT_POWER_CALLS - arm_calls) / per_day)
-                        notes.append(f"按当前 {per_day:.1f} 调用/天：达 {MIN_ARM_CALLS} 调用还需 ~{eta_floor:.0f} 天，"
-                                     f"达功效规划 {STAT_POWER_CALLS} 调用还需 ~{eta_power:.0f} 天")
-                    else:
-                        notes.append("后臂没有真实使用，无法估算攒样本速度")
+                    notes.append(eta_note(arm_calls, since))
                 except (TypeError, ValueError):
                     pass
         else:
@@ -262,9 +276,21 @@ def main():
             age_days = (datetime.now() - gen).days
             if age_days > FALLBACK_DAYS:
                 work_hits.append(f"14 天兜底：距上次判定已 {age_days} 天")
-        except Exception:
-            notes.append("无法解析上次判定时间，按兜底处理")
+        except (TypeError, ValueError) as exc:
+            # 窄捕获：只吞「解析不了时间」这一种，别的异常要露出来
+            notes.append(f"无法解析上次判定时间（{type(exc).__name__}: {exc}），按兜底处理")
             work_hits.append("判定时间不可解析，按 14 天兜底处理")
+
+    # 数据缺口不改变 verdict，但必须跟着结论一起出现在人眼前——
+    # 「样本数够」和「数据干净」是两件事，混成一个 GO 会让人拿脏样本出判决。
+    data_gaps = []
+    if signals:
+        if signals.get("badLines"):
+            data_gaps.append(f"坏行 {signals['badLines']}")
+        if signals.get("unreadableSessions"):
+            data_gaps.append(f"读不出会话 {signals['unreadableSessions']}")
+        if signals.get("orphanCalls"):
+            data_gaps.append(f"有调用无结果 {signals['orphanCalls']}")
 
     verdict = "verify" if sample_hits else ("work" if work_hits else "none")
 
@@ -278,9 +304,11 @@ def main():
         print("[ready] 验证样本门槛：未达——可跑采集/判定/归因，不可出验证判决")
     for r in work_hits:
         print(f"  · 有事可做：{r}")
-    label = {"verify": "GO（样本够，可开验证轮次）",
+    label = {"verify": "GO（够开验证轮次；够不够出判决由 verify 的统计门判，不由本脚本判）",
              "work": "PARTIAL（只可归因，不可出验证判决）",
              "none": "NO-GO（数据不够，只做离线部分）"}[verdict]
+    if verdict == "verify" and data_gaps:
+        label += f" · ⚠ 数据有缺口（{'、'.join(data_gaps)}），判决须注明"
     print(f"[ready] VERDICT={verdict} · {label}")
     return 0 if verdict != "none" else 1
 
