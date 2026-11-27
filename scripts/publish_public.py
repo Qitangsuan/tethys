@@ -28,6 +28,9 @@ COPY_FILES = ["README.md", "ARCHITECTURE.md", "statistics-design.md", "ab-design
 EXAMPLE_SRC = os.path.join(PRIVATE, "dist", "AGENTS.evolve.md")
 EXAMPLE_DST = os.path.join(PUBLIC, "dist", "AGENTS.example.md")
 
+# DNS 被污染时的兜底：GitHub 官方 IP（2026-11-27 实测可达；会随官方迁移变化）
+GITHUB_FALLBACK_IPS = ("140.82.112.3", "140.82.113.3", "20.27.177.113", "4.237.22.38")
+
 # 敏感模式：用户目录（任意用户名/斜杠风格）、疑似密钥值
 SENSITIVE = {
     "用户路径": re.compile(r"C:[\\/]{1,2}Users[\\/]{1,2}"),
@@ -117,6 +120,15 @@ def main():
         run(["commit", "-m", "sync: " + __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M")])
         print("[2] 已提交:", st.stdout.strip().splitlines()[0] if st.stdout.strip() else "")
     r = run(["push", "origin", "master"])
+    if r.returncode != 0:
+        # DNS 污染时 github.com 会被解析到不可达 IP（如 20.247.166.64），
+        # 表现为「Failed to connect ... after 21s」，而 TCP 直连官方 IP 反而通。
+        # 用 curloptResolve 把主机名钉到可用 IP 上绕过解析。
+        for ip in GITHUB_FALLBACK_IPS:
+            print(f"[3] 直连失败，试 curloptResolve → {ip}")
+            r = run(["-c", f"http.curloptResolve=github.com:443:{ip}", "push", "origin", "master"])
+            if r.returncode == 0:
+                break
     print("[3] push:", (r.stdout + r.stderr).strip()[-300:])
     if r.returncode != 0:
         print("!! push 失败（网络/凭据），可稍后重跑本脚本")
