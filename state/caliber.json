@@ -1,7 +1,7 @@
 {
   "_说明": "口径单一来源（qwen 拍板 C：口径不许做成并列模块，必须是 classify/verify 强制引用的常量源）。改口径必须先改这里 + 登记变更 + 新旧并行回算一个窗口。",
   "version": "caliber-2026-11-24-1",
-  "rulesRevision": "rules-0807c21558",
+  "rulesRevision": "rules-88ea054b31",
   "anchors": {
     "errorPrefix": [
       "Error:",
@@ -73,6 +73,11 @@
     "note": "仅升级验证方法，不改事件分类版本。thresholds 内的 v3 参数保留供历史回算，不再作为统计证据。会话数下限是退让策略而非功效保证。"
   },
   "_变更历史": [
+    {
+      "date": "2026-11-27",
+      "version": "rules-88ea054b31",
+      "change": "规则措辞收紧（仍 7 条，不新增条数）：①R1 `-c` 从「简单单行可用」改成「只用于真正一行且无引号嵌套，其余一律写文件」——实测 8 次 `File \"<string>\"` 语法错来自多行/嵌套引号塞 -c；②R4 补「asar 是单文件，glob／grep／Get-ChildItem 一律失败」——实测 14 次 grep/glob 失败源于在 asar 里发现文件。归因见 docs/c-attribution.md。"
+    },
     {
       "date": "2026-11-24",
       "version": "caliber-2026-11-24-1",
