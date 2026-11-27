@@ -3,21 +3,21 @@
   "rules": {
     "1": {
       "title": "按本机环境执行脚本",
-      "since": "2026-11-21",
+      "since": "2026-11-27",
       "verify": false,
       "verify_reason": "exit_1_real 无法分离解释器/脚本策略/解析错误",
       "detects": []
     },
     "2": {
       "title": "先缩小输出范围",
-      "since": "2026-11-21",
+      "since": "2026-11-27",
       "verify": false,
       "verify_reason": "truncated 是独立指标，不进入真失败或规则收益",
       "detects": []
     },
     "3": {
       "title": "环境故障停止无效重试",
-      "since": "2026-11-21",
+      "since": "2026-11-27",
       "verify_mode": "config_ticket",
       "detects": [
         "pty_startup_fail",
@@ -30,7 +30,7 @@
     },
     "4": {
       "title": "路径不确定才定位，越界就改范围",
-      "since": "2026-11-21",
+      "since": "2026-11-27",
       "detects": [
         "file_read_missing",
         "read_out_of_range"
@@ -38,7 +38,7 @@
     },
     "5": {
       "title": "编辑失败后重读再改",
-      "since": "2026-11-21",
+      "since": "2026-11-27",
       "detects": [
         "file_not_read",
         "file_conflict",
@@ -47,7 +47,7 @@
     },
     "6": {
       "title": "动态标识符从清单取",
-      "since": "2026-11-21",
+      "since": "2026-11-27",
       "detectsPatterns": [
         "unknown entry id",
         "no catalogued Service",
@@ -57,7 +57,7 @@
     },
     "7": {
       "title": "参数类型错，改值再发",
-      "since": "2026-11-21",
+      "since": "2026-11-27",
       "detectsPatterns": [
         "rejected input",
         "must be an object"
@@ -66,6 +66,7 @@
     }
   },
   "_口径修正": {
-    "2026-11-21": "规则集重设计：旧 10 条 → 新 7 条。新规则 since=2026-11-21，历史前后验证不再适用（旧块 vs 新块需前瞻 A/B）。旧规则判决留档 data/verify/2026-11-20-statistics.md。"
+    "2026-11-21": "规则集重设计：旧 10 条 → 新 7 条。新规则 since=2026-11-21，历史前后验证不再适用（旧块 vs 新块需前瞻 A/B）。旧规则判决留档 data/verify/2026-11-20-statistics.md。",
+    "2026-11-27": "规则措辞收紧（rules-88ea054b31）：R1 的 -c 收窄、R4 补 asar 不能列目录。规则内容变了所以 since 同步从 11-21 重置到 11-27——11-21~11-27 的 8 会话/1,355 调用是旧措辞基线，不再计入当前规则的验证分子分母，另存 data/verify/2026-11-27-legacy-arm.md。"
   }
 }
